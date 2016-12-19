@@ -1,11 +1,9 @@
 <?php
 namespace frontend\controllers;
 
-use common\models\ImageResize;
 use Yii;
 use common\models\LoginForm;
 use common\models\Picture;
-use common\models\User;
 use frontend\models\PasswordResetRequestForm;
 use frontend\models\ResetPasswordForm;
 use frontend\models\SignupForm;
@@ -15,9 +13,10 @@ use yii\web\BadRequestHttpException;
 use yii\web\Controller;
 use yii\filters\VerbFilter;
 use yii\filters\AccessControl;
-use Imagine\Gd\Imagine;
 use Imagine\Image\Point;
-use Imagine\Image\Box;
+use yii\web\UploadedFile;
+use yii\helpers\Html;
+use yii\web\Response;
 
 /**
  * Site controller
@@ -79,16 +78,86 @@ class SiteController extends Controller
     public function actionIndex()
     {
         $pictures = [];
+        $model = new Picture();
 
         if (\Yii::$app->user->id) {
-            $user = User::findOne(\Yii::$app->user->id);
-            $pictures = Picture::find()
-                ->where(['user_id' => $user->id])
-                ->orderBy('id DESC')
-                ->all();
+            $query = $model->imageQuery();
+            $pictures = $query['pictures'];
+            $pages = $query['pages'];
+
+            return $this->render('index', compact('pictures', 'model', 'pages'));
         }
 
-        return $this->render('index', compact('pictures'));
+        return $this->render('index', compact('pictures', 'model'));
+    }
+
+    /**
+     * Upload multiple images.
+     *
+     * @return mixed
+     */
+    public function actionUploadImage()
+    {
+        $model = new Picture();
+
+        if (Yii::$app->request->isAjax) {
+            $model->imageFiles = UploadedFile::getInstances($model, 'imageFiles');
+            if ($model->validate()) {
+                if ($model->upload()) {
+                    $query = $model->imageQuery();
+                    $pictures = $query['pictures'];
+                    $pages = $query['pages'];
+
+                    return $this->renderPartial('content/table', compact('pictures', 'pages'));
+                }
+            }
+
+        }
+
+        $response = Yii::$app->response;
+        $response->format = Response::FORMAT_JSON;
+        return $model->getErrors();
+    }
+
+    /**
+     * Rotate image.
+     *
+     * @return mixed
+     */
+    public function actionRotateImage()
+    {
+        $id = \Yii::$app->request->post('id');
+
+        $model = Picture::findOne($id);
+        $path = $model->getImage(false);
+
+        $model->imageRotate($path);
+
+        $viewPath = '/' . $path . '?' . time();
+
+        return Html::img($viewPath, ['height' => 200]);
+    }
+
+    /**
+     * Delete image.
+     *
+     * @return mixed
+     */
+    public function actionDeleteImage()
+    {
+        $id = \Yii::$app->request->post('id');
+        $model = Picture::findOne($id);
+
+        $path = $model->getImage(false);
+        unlink($path);
+
+        $model->delete();
+
+        $query = $model->imageQuery();
+        $pictures = $query['pictures'];
+        $pages = $query['pages'];
+
+        return $this->renderPartial('content/table', compact('pictures', 'pages'));
     }
 
     /**
@@ -225,100 +294,5 @@ class SiteController extends Controller
         return $this->render('resetPassword', [
             'model' => $model,
         ]);
-    }
-
-    /**
-     * Upload multiple images.
-     *
-     * @return mixed
-     * @throws BadRequestHttpException
-     */
-    public function actionUpload()
-    {
-        $photoSrc = $_FILES['imageFile']['tmp_name'];
-
-        if (is_file($photoSrc)) {
-            $user = User::findOne(\Yii::$app->user->id);
-
-            $model = new Picture();
-
-            $path = 'images/'.$user->id.'/';
-
-            if(!file_exists($path)){
-                mkdir($path);
-            }
-            $fileName = uniqid();
-            $extension = '.png';
-
-            $photoDest = $path . $fileName . $extension;
-
-            copy($photoSrc, $photoDest);
-
-            $imagine = new Imagine();
-
-            $img = $imagine->open($photoDest);
-            $watermark = $imagine->open('images/watermark.png');
-
-            $size = $img->getSize();
-            $wSize = $watermark->getSize();
-            $ratio = $size->getWidth()/$size->getHeight();
-
-            $width = 500;
-            $height = round($width/$ratio);
-            $box = new Box($width, $height);
-
-            $bottomRight = new Point($size->getWidth() - $wSize->getWidth(), $size->getHeight() - $wSize->getHeight());
-
-            $img->paste($watermark, $bottomRight);
-            $img->resize($box)->save($photoDest);
-
-            $model->user_id = $user->id;
-            $model->image = $fileName . $extension;
-            $model->save();
-
-            $response = Yii::$app->response;
-            $response->format = \yii\web\Response::FORMAT_JSON;
-
-            return ['photo' => $photoDest, 'id' => $model->id];
-        }
-        return false;
-    }
-
-    /**
-     * Rotate image.
-     *
-     * @return mixed
-     */
-    public function actionRotateImage()
-    {
-        $id = \Yii::$app->request->post('id');
-
-        $model = Picture::findOne($id);
-        $path = $model->getImage();
-
-        $imagine = new Imagine();
-
-        $img = $imagine->open($path);
-        $img->rotate(90)->save($path);
-
-        return $path . '?' . time();
-    }
-
-    /**
-     * Delete image.
-     *
-     * @return mixed
-     */
-    public function actionDeleteImage()
-    {
-        $id = \Yii::$app->request->post('id');
-        $model = Picture::findOne($id);
-
-        $path = $model->getImage();
-        unlink($path);
-
-        $model->delete();
-
-        return true;
     }
 }

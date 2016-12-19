@@ -1,7 +1,7 @@
 <?php
 use kartik\file\FileInput;
 use yii\helpers\Url;
-use yii\helpers\Html;
+use yii\widgets\ActiveForm;
 
 $this->title = 'Image Gallery';
 ?>
@@ -13,37 +13,31 @@ $this->title = 'Image Gallery';
         <?php if (!Yii::$app->user->isGuest): ?>
         <h3><?= Yii::t('app', 'Hello, {user}!', ['user' => Yii::$app->user->identity->username]) ?></h3>
             <div class="row file-uploaded">
-                <?= FileInput::widget([
+                <?php $form = ActiveForm::begin([
+                'options'=>[
+                    'encytype'=>'multipart/form-data'
+                ],
+                ]); ?>
+                <?= $form->field($model, 'imageFiles[]')->widget(FileInput::classname(), [
                     'options' => [
                         'accept' => 'image/*',
                         'multiple' => true
                     ],
-                    'name' => 'imageFile',
                     'pluginOptions' => [
                         'allowedFileExtensions'=>['jpg', 'png'],
                         'previewFileType' => 'any',
-                        'uploadUrl' => Url::to(['/site/upload']),
+                        'uploadUrl' => Url::to(['upload-image', Yii::$app->request->queryParams]),
                         'maxFileCount' => 10,
-                        'maxFileSize' => 5000
+                        'maxFileSize' => 5000,
+                        'minImageHeight' => 250,
+                        'minImageWidth' => 500
                     ],
-                ]);
+                ])->label(false);
                 ?>
+                <?php ActiveForm::end(); ?>
             </div>
-
-            <div class="row">
-                <table class="table table-bordered upload-success">
-                <?php foreach ($pictures as $picture): ?>
-                    <tr>
-                        <td><?= Html::img($picture->getImage()) ?></td>
-                        <td>
-                            <button id="rotate-image-<?= $picture->id ?>" type="button" class="btn btn-primary" onClick="rotate_image(<?= $picture->id ?>)">Rotate</button>
-                        </td>
-                        <td>
-                            <button id="delete-image-<?= $picture->id ?>" type="button" class="btn btn-danger" onClick="delete_image(<?= $picture->id ?>)">Delete</button>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </table>
+            <div class="row table-pictures">
+                <?= $this->render('content/table', compact('pictures', 'pages')); ?>
             </div>
         <?php else: ?>
             <div class="row text-center">
@@ -55,21 +49,20 @@ $this->title = 'Image Gallery';
 
 <?php Yii::$app->view->registerJs(<<<JS
 $('.file-uploaded').on('fileuploaded', function(event, data, previewId, index) {
-    $('.upload-success').prepend('<tr><td><img src="' + data.response.photo +'"></td>' +
-    '<td><button id="rotate-image-' + data.response.id + '" type="button" class="btn btn-primary" onClick="rotate_image(' + data.response.id + ')">Rotate</button></td>' +
-     '<td><button id="delete-image-' + data.response.id + '" type="button" class="btn btn-danger" onClick="delete_image(' + data.response.id + ')">Delete</button></td></tr>');
+    $('.table-pictures').html(data.response);
 });
 JS
     , \yii\web\View::POS_READY); ?>
 
 <?php Yii::$app->view->registerJs(<<<JS
 function delete_image(id) {
+console.log(location.pathname);
     $.ajax({
-        url: '/site/delete-image',
+        url: '/site/delete-image'+location.pathname,
         type: 'POST',
         data: 'id='+id,
         success: function (data) {
-            $('#delete-image-'+id).parent().parent().remove();
+            $('.table-pictures').html(data);
         }
     });
 }
@@ -80,8 +73,7 @@ function rotate_image(id) {
         type: 'POST',
         data: 'id='+id,
         success: function (data) {
-            var result = '<img src="' + data +'">';
-            $('#rotate-image-'+id).parent().prev('td').html(result);
+            $('#rotate-image-'+id).parent().prev('td').html(data);
         }
     });
 }

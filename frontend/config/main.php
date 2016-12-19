@@ -40,6 +40,10 @@ return [
             'enablePrettyUrl' => true,
             'showScriptName' => false,
             'rules' => [
+                '<page:\d+>/<per-page:\d+>/' => 'site/index',
+                'site/index' => 'site/index',
+                'site/delete-image/<page:\d+>/<per-page:\d+>/' => 'site/delete-image',
+                'site/delete-image' => 'site/delete-image',
             ],
         ],
     ],
