@@ -56,7 +56,6 @@ JS
 
 <?php Yii::$app->view->registerJs(<<<JS
 function delete_image(id) {
-console.log(location.pathname);
     $.ajax({
         url: '/site/delete-image'+location.pathname,
         type: 'POST',
